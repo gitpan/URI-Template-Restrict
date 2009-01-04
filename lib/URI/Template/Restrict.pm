@@ -11,7 +11,7 @@ use URI::Escape qw(uri_escape_utf8);
 use URI::Template::Restrict::Expansion;
 use namespace::clean -except => ['meta'];
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 has 'template' => (
     is      => 'rw',
@@ -111,7 +111,9 @@ URI::Template::Restrict - restricted URI Templates handler
 
     use URI::Template::Restrict;
 
-    my $template = URI::Template->new(template => 'http://example.com/{foo}');
+    my $template = URI::Template::Restrict->new(
+        template => 'http://example.com/{foo}'
+    );
 
     my $uri = $template->process(foo => 'y');
     # $uri: "http://example.com/y"
