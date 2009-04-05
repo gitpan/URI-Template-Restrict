@@ -1,55 +1,48 @@
 package URI::Template::Restrict;
 
-use 5.8.1;
-use Mouse;
+use 5.008_001;
+use strict;
+use warnings;
+use base 'Class::Accessor::Fast';
 use overload '""' => \&template, fallback => 1;
 use List::MoreUtils qw(uniq);
-use Storable qw(dclone);
 use Unicode::Normalize qw(NFKC);
 use URI;
 use URI::Escape qw(uri_escape_utf8);
 use URI::Template::Restrict::Expansion;
-use namespace::clean -except => ['meta'];
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
-has 'template' => (
-    is      => 'rw',
-    isa     => 'Str',
-    trigger => sub { shift->parse(@_) },
-);
+__PACKAGE__->mk_ro_accessors(qw'template segments');
 
-has 'segments' => (
-    is         => 'rw',
-    isa        => 'ArrayRef',
-    default    => sub { [] },
-    lazy       => 1,
-    auto_deref => 1,
-);
+sub new {
+    my ($class, $template) = @_;
+
+    my @segments =
+        map {
+            /^\{(.+?)\}$/
+                ? URI::Template::Restrict::Expansion->new($1)
+                : $_
+        }
+        grep { defined && length }
+        split /(\{.+?\})/, $template;
+
+    my $self = { template => $template, segments => [@segments] };
+    return $class->SUPER::new($self);
+}
 
 sub expansions {
-    my $self = shift;
-    return grep { blessed $_ } $self->segments;
+    return grep { ref $_ } @{ $_[0]->segments };
 }
 
 sub variables {
-    my $self = shift;
-    return uniq sort map { $_->{name} } map { $_->vars } $self->expansions;
-}
-
-sub parse {
-    my ($self, $template) = @_;
-
-    my @segments =
-        map { URI::Template::Restrict::Expansion->parse($_) || $_ }
-        grep { defined && length } split /(\{.+?\})/, $template;
-
-    $self->segments([@segments]);
-}
-
-sub process {
-    my $self = shift;
-    return URI->new($self->process_to_string(@_));
+    return
+        uniq
+        sort
+        map { $_->name }
+        map { ref $_ eq 'ARRAY' ? @$_ : $_ }
+        map { $_->vars }
+        $_[0]->expansions;
 }
 
 # ----------------------------------------------------------------------
@@ -61,47 +54,47 @@ sub process {
 #   every octet of the UTF-8 string that falls outside of ( unreserved )
 #   MUST be percent-encoded.
 # ----------------------------------------------------------------------
+sub process {
+    my $self = shift;
+    return URI->new($self->process_to_string(@_));
+}
+
 sub process_to_string {
     my $self = shift;
+    my $args = ref $_[0] ? shift : { @_ };
+    my $vars = {};
 
-    my $vars = dclone((ref $_[0] and ref $_[0] eq 'HASH') ? $_[0] : { @_ });
-    for my $value (values %$vars) {
+    for my $key (keys %$args) {
+        my $value = $args->{$key};
         next if ref $value and ref $value ne 'ARRAY';
-
-        # TODO: check ( unreserved / pct-encoded )
-        $_ = uri_escape_utf8(NFKC(defined $_ ? $_ : ''))
-            for (ref $value ? @$value : $value);
+        $vars->{$key} = ref $value
+            ? [ map { uri_escape_utf8(NFKC($_)) } @$value ]
+            : uri_escape_utf8(NFKC($value));
     }
 
-    return join '', map { blessed $_ ? $_->process($vars) : $_ } $self->segments;
+    return join '', map { ref $_ ? $_->process($vars) : $_ } @{ $self->segments };
 }
 
 sub extract {
     my ($self, $uri) = @_;
 
-    my $re = '';
-    for ($self->segments) {
-        if (blessed $_) {
-            $re .= '(' . $_->re . ')';
-        }
-        else {
-            $re .= quotemeta $_;
-        }
+    my $re = join '', map { ref $_ ? '('.$_->pattern.')' : quotemeta $_ } @{ $self->segments };
+    my @match = $uri =~ /$re/;
+
+    my @expansions = $self->expansions;
+    return unless @match and @match == @expansions;
+
+    my @vars;
+    while (@match > 0) {
+        my $match = shift @match;
+        my $expansion = shift @expansions;
+        push @vars, $expansion->extract($match);
     }
 
-    return unless my @match = $uri =~ /$re/;
-    return unless @match == $self->expansions;
-
-    my %vars;
-    for ($self->expansions) {
-        my %var = $_->extract(shift @match);
-        %vars = (%vars, %var);
-    }
-
-    return %vars;
+    return %{{ @vars }};
 }
 
-no Mouse; __PACKAGE__->meta->make_immutable; 1;
+1;
 
 =head1 NAME
 
@@ -131,7 +124,9 @@ B<-neg> operators.
 
 =head1 METHODS
 
-=head2 new(template => $template)
+=head2 new($template)
+
+Creates a new instance with the template.
 
 =head2 process(%vars)
 
