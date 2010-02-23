@@ -11,7 +11,7 @@ use URI;
 use URI::Escape qw(uri_escape_utf8);
 use URI::Template::Restrict::Expansion;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 __PACKAGE__->mk_ro_accessors(qw'template segments');
 
@@ -28,7 +28,7 @@ sub new {
         split /(\{.+?\})/, $template;
 
     my $self = { template => $template, segments => [@segments] };
-    return $class->SUPER::new($self);
+    return bless $self, $class;
 }
 
 sub expansions {

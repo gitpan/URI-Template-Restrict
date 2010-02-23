@@ -50,6 +50,7 @@ inc/Test/Deep/RegexpMatches.pm
 inc/Test/Deep/RegexpOnly.pm
 inc/Test/Deep/RegexpRef.pm
 inc/Test/Deep/RegexpRefOnly.pm
+inc/Test/Deep/RegexpVersion.pm
 inc/Test/Deep/ScalarRef.pm
 inc/Test/Deep/ScalarRefOnly.pm
 inc/Test/Deep/Set.pm
@@ -74,4 +75,3 @@ t/20_draft-03.t
 xt/01_pod.t
 xt/02_podcoverage.t
 xt/03_podspell.t
-xt/04_dependencies.t
